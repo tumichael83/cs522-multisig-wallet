@@ -21,6 +21,8 @@ contract MultiSigWallet {
     // TODO: implement RevokeConfirmation event
     // hint: you can follow the style of event ConfirmTransaction
     event RevokeConfirmation(
+        address indexed owner,
+        uint indexed transactionID
     );
 
     event ExecuteTransaction(
@@ -57,6 +59,7 @@ contract MultiSigWallet {
     modifier ownerExists() {
         // TODO: check if msg.sender is owner
         // The check usually is the form of 'require(condition, "error message");'
+        require(isOwner[msg.sender], "owner does not exist");
         _;
     }
 
@@ -89,11 +92,17 @@ contract MultiSigWallet {
     constructor(address[] memory _owners, uint _requiredConfirmations) {
         // TODO: implement constructor function
         // 1. check _owners is not empty, replace condition1 with the correct condition
-        require(condition1, "owners required");
+        require(_owners.length > 0, "owners required");
         // 2. check _requiredConfirmations is not zero and not greater than _owners.length, replace condition2 with the correct condition
-        require(condition2, "invalid number of required confirmations");
+        require((0 < _requiredConfirmations) && (_requiredConfirmations <= _owners.length), "invalid number of required confirmations");
         // 3. push _owners to owners array, and set isOwner to true
+        for (uint i = 0; i < _owners.length; i++) {
+            owners.push(_owners[i]);
+            isOwner[_owners[i]] = true;
+        }
         // 4. set requiredConfirmations to _requiredConfirmations and transactionCount to zero
+        requiredConfirmations = _requiredConfirmations;
+        transactionCount = 0;
     }
 
     function submitTransaction(
@@ -104,11 +113,20 @@ contract MultiSigWallet {
         // TODO: implement submitTransaction function
         // hint: use transactionCount to get transactionID
         // hint: use transactions mapping to store transaction
+        uint transactionID = transactionCount;
+        transactions[transactionID].destination      = _destination;
+        transactions[transactionID].value            = _value;
+        transactions[transactionID].executed         = false;
+        transactions[transactionID].data             = _data;
+        transactionCount = transactionCount + 1;
+        emit SubmitTransaction(msg.sender, transactionID, _destination, _value, _data);
     }
 
     function confirmTransaction(uint _transactionID) public ownerExists transactionExists(_transactionID) notExecuted(_transactionID) notConfirmed(_transactionID) {
         // TODO: implement confirmTransaction function
         // hint: use confirmations mapping and emit ConfirmTransaction event
+        confirmations[_transactionID][msg.sender] = true;
+        emit ConfirmTransaction(msg.sender, _transactionID);
     }
 
     function confirmTransactionBySignature(
@@ -151,6 +169,40 @@ contract MultiSigWallet {
     ) public transactionExists(_transactionID) notExecuted(_transactionID) {
         // TODO: implement confirmTransactionByPackedSignatures function
         // hint: read confirmTransactionBySignature function and learn how to split bytes using Solidity
+        Transaction storage transaction = transactions[_transactionID];
+        uint numSignatures = signatures.length / 65;
+
+        bytes memory startAddr = signatures;
+        for (uint i = 0; i < numSignatures; i++) {
+            bytes32 r;  // first 32 bytes of signature
+            bytes32 s;  // second 32 bytes of signature
+            uint8 v;    // final 1 byte of signature
+
+            assembly {
+                r := mload(add(startAddr, 0x20))
+                s := mload(add(startAddr, 0x40))
+                v := and(mload(add(startAddr, 0x41)), 0xff)
+                startAddr := add(startAddr, 0x41)
+            }
+
+            address signer = recoverSigner(
+                _transactionID,
+                transaction.destination,
+                transaction.value,
+                transaction.data,
+                r,
+                s,
+                v
+            );
+
+            require(
+                isOwner[signer],
+                "invalid signature"
+            );
+
+            confirmations[_transactionID][signer] = true;
+            emit ConfirmTransaction(signer, _transactionID);
+        }
         
     }
 
@@ -213,6 +265,13 @@ contract MultiSigWallet {
     function getConfirmationCount(uint transactionID) public view returns (uint) {
        // TODO: implement getConfirmationCount function
        // hint: use confirmations mapping and owners array
+       uint confirmationCount = 0;
+       for (uint i = 0; i < owners.length; i++) {
+            if (confirmations[transactionID][owners[i]] == true) {
+                confirmationCount = confirmationCount + 1;
+            }
+       }
+       return confirmationCount;
     }
 
     function getTransactionHash(
@@ -245,5 +304,8 @@ contract MultiSigWallet {
 
         // TODO: implement recoverSigner function
         // hint: use ecrecover function
+        address signer = ecrecover(transactionHash, v, r, s);
+        return signer;
     }
 }
+
