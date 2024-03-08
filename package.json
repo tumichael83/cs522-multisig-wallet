@@ -1,0 +1,15 @@
+{
+  "name": "multisigwallet",
+  "version": "1.0.0",
+  "description": "Test cases for MultiSig Wallet, the Solidity programming lab for CPSC 364: Introduction to Blockchains, Cryptocurrencies, and Smart Contracts",
+  "scripts": {
+    "test": "npx hardhat test test/MultiSigWallet.js"
+  },
+  "keywords": [],
+  "devDependencies": {
+    "@nomicfoundation/hardhat-chai-matchers": "^2.0.2",
+    "@nomicfoundation/hardhat-toolbox": "^3.0.0",
+    "chai": "^4.3.10",
+    "hardhat": "^2.17.4"
+  }
+}
